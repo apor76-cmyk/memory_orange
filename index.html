@@ -56,6 +56,7 @@ button{padding:6px 12px;border:none;border-radius:12px;background:var(--btn);col
  <button onclick="toggleDark()">🌙 다크모드</button>
  <button onclick="shuffleToggle()">🔀 랜덤</button>
  <button onclick="toggleFullscreen()">🖥 전체화면</button>
+ <button onclick="githubSyncPrompt()">🔗 GitHub 연동</button>
 </div>
 
 <div class="tabs">
@@ -96,7 +97,6 @@ button{padding:6px 12px;border:none;border-radius:12px;background:var(--btn);col
 <script>
 const layout=[5,5,5,5];
 const maxStep=20;
-
 let words=[], positions=[], completedWords=[], originalWords=[];
 let isShuffled=false;
 
@@ -256,8 +256,19 @@ importBackup.addEventListener("change", e=>{
  reader.readAsText(file);
 });
 
-/* 초기화 + GitHubSync */
-window.addEventListener("load", async ()=>{
+/* GitHub 동기화 + 토큰 입력 */
+async function githubSyncPrompt(){
+ if(typeof GitHubSync === 'undefined') return alert("GitHubSync.js 로드 실패");
+ const token = prompt("GitHub Personal Access Token 입력 (repo 권한 필요)");
+ if(!token) return alert("토큰이 필요합니다");
+ GitHubSync.setToken(token);
+ await GitHubSync.syncFromGitHub();
+ GitHubSync.syncToGitHub();
+ alert("GitHub 동기화 완료!");
+}
+
+/* 초기화 */
+window.addEventListener("load", ()=>{
  const saved = localStorage.getItem("memoryPathState");
  if(saved){
    const s=JSON.parse(saved);
@@ -270,10 +281,6 @@ window.addEventListener("load", async ()=>{
  render();
  loadSessionList();
  loadCompletedList();
- if(typeof GitHubSync !== 'undefined'){
-   await GitHubSync.syncFromGitHub();
-   GitHubSync.syncToGitHub();
- }
 });
 </script>
 
