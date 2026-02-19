@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Memory Path Infinite</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<!-- githubSync.js를 같은 폴더에 두었을 때 -->
 <script src="githubSync.js" defer></script>
 
 <style>
@@ -95,12 +96,12 @@ button{padding:6px 12px;border:none;border-radius:12px;background:var(--btn);col
 </div>
 
 <script>
-const layout=[5,5,5,5];
-const maxStep=20;
+/* ================= Memory Path Core ================= */
+const layout=[5,5,5,5]; const maxStep=20;
 let words=[], positions=[], completedWords=[], originalWords=[];
 let isShuffled=false;
 
-/* 랜덤 토글 */
+/* 랜덤 */
 function shuffleToggle(){
  if(!words.length) return;
  if(!isShuffled){
@@ -117,16 +118,10 @@ function shuffleToggle(){
 }
 
 /* 다크모드 */
-function toggleDark(){
- document.body.classList.toggle("dark");
- localStorage.setItem("darkMode",document.body.classList.contains("dark"));
-}
+function toggleDark(){document.body.classList.toggle("dark");localStorage.setItem("darkMode",document.body.classList.contains("dark"));}
 
 /* 전체화면 */
-function toggleFullscreen(){
- if(!document.fullscreenElement) document.documentElement.requestFullscreen();
- else document.exitFullscreen();
-}
+function toggleFullscreen(){if(!document.fullscreenElement) document.documentElement.requestFullscreen(); else document.exitFullscreen();}
 
 /* 탭 전환 */
 function switchTab(id, evt){
@@ -137,19 +132,15 @@ function switchTab(id, evt){
 }
 
 /* 엑셀 업로드 */
-const upload = document.getElementById("upload");
+const upload=document.getElementById("upload");
 upload.addEventListener("change", e=>{
- const file=e.target.files[0];
- const reader=new FileReader();
+ const file=e.target.files[0]; const reader=new FileReader();
  reader.onload=ev=>{
   const data=new Uint8Array(ev.target.result);
   const wb=XLSX.read(data,{type:"array"});
   const sheet=wb.Sheets[wb.SheetNames[0]];
   const json=XLSX.utils.sheet_to_json(sheet);
-  words=json.map(r=>{
-    const k=Object.keys(r);
-    return {word:r[k[0]], meaning:r[k[1]]};
-  });
+  words=json.map(r=>{const k=Object.keys(r); return {word:r[k[0]], meaning:r[k[1]]};});
   originalWords=JSON.parse(JSON.stringify(words));
   positions=words.map(()=>0);
   completedWords=[];
@@ -159,23 +150,15 @@ upload.addEventListener("change", e=>{
  reader.readAsArrayBuffer(file);
 });
 
-/* 카드 이동 */
+/* 카드 이동, 렌더링, 스와이프, 버튼 */
 function moveCard(i, step){
- if(step>0){
-  positions[i]++;
-  if(positions[i]>=maxStep){
-   const w=words[i];
-   if(!completedWords.some(c=>c.word===w.word)) completedWords.push(w);
-   positions[i]=maxStep;
-  }
- }else positions[i]=0;
+ if(step>0){positions[i]++; if(positions[i]>=maxStep){const w=words[i]; if(!completedWords.some(c=>c.word===w.word)) completedWords.push(w); positions[i]=maxStep;}}
+ else positions[i]=0;
  saveState(); render();
 }
 
-/* 카드 렌더링 */
 function render(){
- const grid=document.getElementById("grid");
- grid.innerHTML="";
+ const grid=document.getElementById("grid"); grid.innerHTML="";
  let stepIndex=0;
  layout.forEach(rc=>{
   const row=document.createElement("div"); row.className="row";
@@ -191,12 +174,8 @@ function render(){
     inner.append(f,b); card.appendChild(inner); slot.appendChild(card);
     card.onclick=()=>inner.style.transform=inner.style.transform==="rotateY(180deg)"?"":"rotateY(180deg)";
     let startX=0;
-    card.addEventListener("touchstart", e=> startX=e.touches[0].clientX);
-    card.addEventListener("touchend", e=>{
-      const diff=e.changedTouches[0].clientX-startX;
-      if(diff>40) moveCard(idx,1);
-      if(diff<-40) moveCard(idx,-1);
-    });
+    card.addEventListener("touchstart", e=>startX=e.touches[0].clientX);
+    card.addEventListener("touchend", e=>{const diff=e.changedTouches[0].clientX-startX; if(diff>40) moveCard(idx,1); if(diff<-40) moveCard(idx,-1);});
     const btnRow=document.createElement("div"); btnRow.className="btnRow";
     const ok=document.createElement("button"); ok.textContent="✔️"; ok.onclick=e=>{e.stopPropagation(); moveCard(idx,1);};
     const no=document.createElement("button"); no.textContent="❌"; no.onclick=e=>{e.stopPropagation(); moveCard(idx,-1);};
@@ -212,15 +191,9 @@ function render(){
 /* 자동 스케일 */
 function autoScaleGrid(){
  const grid=document.querySelector(".grid");
- const totalW=120*5;
- const totalH=160*4;
- const scaleW=(window.innerWidth*0.95)/totalW;
- const scaleH=(window.innerHeight-180)/totalH;
- let scale=Math.min(scaleW,scaleH);
- const isIPad = /iPad/.test(navigator.userAgent) && navigator.maxTouchPoints>1;
- if(isIPad) scale*=0.95;
- if(scale>1) scale=1;
- if(scale<0.45) scale=0.45;
+ const totalW=120*5; const totalH=160*4;
+ let scale=Math.min((window.innerWidth*0.95)/totalW,(window.innerHeight-180)/totalH);
+ if(scale>1) scale=1; if(scale<0.45) scale=0.45;
  grid.style.transform=`scale(${scale})`;
 }
 window.addEventListener("resize", autoScaleGrid);
@@ -228,58 +201,40 @@ window.addEventListener("resize", autoScaleGrid);
 /* 상태 저장 */
 function saveState(){localStorage.setItem("memoryPathState",JSON.stringify({words,positions,completedWords,originalWords}));}
 
-/* 세션 관리 */
+/* 세션 & 완료단어 & 백업 */
 function saveSession(){const name=sessionName.value; if(!name) return alert("이름 입력"); const sessions=JSON.parse(localStorage.getItem("sessions")||"{}"); sessions[name]={words,positions,completedWords}; localStorage.setItem("sessions",JSON.stringify(sessions)); loadSessionList();}
 function loadSession(){const sessions=JSON.parse(localStorage.getItem("sessions")||"{}"); const s=sessions[sessionList.value]; if(!s) return; words=s.words; positions=s.positions; completedWords=s.completedWords; render();}
 function deleteSession(){const sessions=JSON.parse(localStorage.getItem("sessions")||"{}"); delete sessions[sessionList.value]; localStorage.setItem("sessions",JSON.stringify(sessions)); loadSessionList();}
 function loadSessionList(){const sessions=JSON.parse(localStorage.getItem("sessions")||"{}"); sessionList.innerHTML=""; Object.keys(sessions).forEach(k=>{const o=document.createElement("option"); o.value=k; o.textContent=k; sessionList.appendChild(o);});}
 
-/* 완료 단어 관리 */
 function saveCompletedSession(){const name=completedName.value; if(!completedWords.length) return alert("완료 없음"); const sessions=JSON.parse(localStorage.getItem("completedSessions")||"{}"); sessions[name]={words:completedWords, positions:completedWords.map(()=>0)}; localStorage.setItem("completedSessions",JSON.stringify(sessions)); loadCompletedList();}
 function loadCompletedSession(){const sessions=JSON.parse(localStorage.getItem("completedSessions")||"{}"); const s=sessions[completedList.value]; if(!s) return; words=s.words; positions=s.positions; completedWords=[]; render();}
 function deleteCompletedSession(){const sessions=JSON.parse(localStorage.getItem("completedSessions")||"{}"); delete sessions[completedList.value]; localStorage.setItem("completedSessions",JSON.stringify(sessions)); loadCompletedList();}
 function loadCompletedList(){const sessions=JSON.parse(localStorage.getItem("completedSessions")||"{}"); completedList.innerHTML=""; Object.keys(sessions).forEach(k=>{const o=document.createElement("option"); o.value=k; o.textContent=k; completedList.appendChild(o);});}
 
-/* 백업/불러오기 */
 function exportBackup(){const data={sessions:JSON.parse(localStorage.getItem("sessions")||"{}"), completedSessions:JSON.parse(localStorage.getItem("completedSessions")||"{}")}; const blob=new Blob([JSON.stringify(data,null,2)],{type:"application/json"}); const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download="MemoryPath_Backup.json"; a.click();}
-importBackup.addEventListener("change", e=>{
- const file=e.target.files[0];
- const reader=new FileReader();
- reader.onload=ev=>{
-   const data=JSON.parse(ev.target.result);
-   if(data.sessions) localStorage.setItem("sessions",JSON.stringify(data.sessions));
-   if(data.completedSessions) localStorage.setItem("completedSessions",JSON.stringify(data.completedSessions));
-   loadSessionList();
-   loadCompletedList();
-   alert("불러오기 완료");
- };
- reader.readAsText(file);
-});
+importBackup.addEventListener("change", e=>{const file=e.target.files[0]; const reader=new FileReader(); reader.onload=ev=>{const data=JSON.parse(ev.target.result); if(data.sessions) localStorage.setItem("sessions",JSON.stringify(data.sessions)); if(data.completedSessions) localStorage.setItem("completedSessions",JSON.stringify(data.completedSessions)); loadSessionList(); loadCompletedList(); alert("불러오기 완료");}; reader.readAsText(file);});
 
-/* GitHub 동기화 + 토큰 입력 */
+/* ================= GitHub 동기화 버튼 ================= */
 async function githubSyncPrompt(){
- if(typeof GitHubSync === 'undefined') return alert("GitHubSync.js 로드 실패");
- await GitHubSync.syncToGitHub();   // 여기서 getToken() 호출 → prompt 뜸
+ if(typeof GitHubSync==='undefined'){
+   alert("GitHubSync.js 로드 실패. 파일 경로 확인 필요");
+   return;
+ }
+ await GitHubSync.syncToGitHub();
  await GitHubSync.syncFromGitHub();
- alert("GitHub 동기화 완료!");
+ alert("✅ GitHub 동기화 완료!");
 }
 
 /* 초기화 */
 window.addEventListener("load", ()=>{
  const saved = localStorage.getItem("memoryPathState");
- if(saved){
-   const s=JSON.parse(saved);
-   words=s.words||[];
-   positions=s.positions||[];
-   completedWords=s.completedWords||[];
-   originalWords=s.originalWords||[];
- }
+ if(saved){ const s=JSON.parse(saved); words=s.words||[]; positions=s.positions||[]; completedWords=s.completedWords||[]; originalWords=s.originalWords||[];}
  if(localStorage.getItem("darkMode")==="true") document.body.classList.add("dark");
  render();
  loadSessionList();
  loadCompletedList();
 });
 </script>
-
 </body>
 </html>
