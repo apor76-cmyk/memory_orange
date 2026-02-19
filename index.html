@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Memory Path Infinite</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<!-- githubSync.js를 같은 폴더에 두었을 때 -->
+<!-- githubSync.js 파일을 HTML과 같은 폴더에 두세요 -->
 <script src="githubSync.js" defer></script>
 
 <style>
@@ -57,7 +57,7 @@ button{padding:6px 12px;border:none;border-radius:12px;background:var(--btn);col
  <button onclick="toggleDark()">🌙 다크모드</button>
  <button onclick="shuffleToggle()">🔀 랜덤</button>
  <button onclick="toggleFullscreen()">🖥 전체화면</button>
- <button onclick="githubSyncPrompt()">🔗 GitHub 연동</button>
+ <button onclick="githubSyncPrompt()">🔗 GitHub 동기화</button>
 </div>
 
 <div class="tabs">
@@ -220,6 +220,12 @@ async function githubSyncPrompt(){
  if(typeof GitHubSync==='undefined'){
    alert("GitHubSync.js 로드 실패. 파일 경로 확인 필요");
    return;
+ }
+ // 토큰 입력창이 항상 뜨도록 getToken() 사용
+ if(!localStorage.getItem("GH_TOKEN")){
+   const token = prompt("GitHub Token 입력 (한 번만 입력)");
+   if(token) localStorage.setItem("GH_TOKEN", token);
+   else return alert("GitHub Token 필요");
  }
  await GitHubSync.syncToGitHub();
  await GitHubSync.syncFromGitHub();
