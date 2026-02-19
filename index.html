@@ -228,5 +228,12 @@ window.onload=()=>{
  render();loadSessionList();loadCompletedList();
 };
 </script>
+
+<script src="githubSync.js"></script>
+GitHubSync.syncToGitHub();
+window.onload = async () => {
+  await GitHubSync.syncFromGitHub();
+};
+ 
 </body>
 </html>
