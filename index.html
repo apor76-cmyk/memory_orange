@@ -259,11 +259,8 @@ importBackup.addEventListener("change", e=>{
 /* GitHub 동기화 + 토큰 입력 */
 async function githubSyncPrompt(){
  if(typeof GitHubSync === 'undefined') return alert("GitHubSync.js 로드 실패");
- const token = prompt("GitHub Personal Access Token 입력 (repo 권한 필요)");
- if(!token) return alert("토큰이 필요합니다");
- GitHubSync.setToken(token);
+ await GitHubSync.syncToGitHub();   // 여기서 getToken() 호출 → prompt 뜸
  await GitHubSync.syncFromGitHub();
- GitHubSync.syncToGitHub();
  alert("GitHub 동기화 완료!");
 }
 
