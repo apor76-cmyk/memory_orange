@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Memory Path Infinite</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+:root{
+ --bg:#FFF8F0; --panel:#FFF1E6; --cardFront:#DFF2BF; --cardBack:#BEE3F8;
+ --text:#3B3B3B; --btn:#FF9900; --btnText:#fff; --border:#FFB366;
+}
+body.dark{
+ --bg:#1F1A17; --panel:#2B2724; --cardFront:#3B5D3B; --cardBack:#1E3A5F;
+ --text:#EEE; --btn:#FF9900; --btnText:#1F1A17; --border:#FF9900;
+}
+body{font-family:Arial,sans-serif;margin:0;padding:20px;text-align:center;background:var(--bg);color:var(--text);}
+.tabs{display:flex;gap:6px;justify-content:center;margin-bottom:10px}
+.tab{padding:8px 14px;border-radius:12px;background:var(--panel);cursor:pointer}
+.tab.active{background:var(--btn);color:var(--btnText)}
+.panel{display:none}
+.panel.active{display:block}
+.grid{display:flex;flex-direction:column-reverse;align-items:center;margin-top:20px;transform-origin:top center;}
+.row{display:flex;flex-wrap:nowrap;justify-content:center;}
+.slot{width:110px;height:150px;margin:5px;border-radius:16px;border:2px solid var(--border);background:var(--panel);display:flex;align-items:center;justify-content:center;flex-direction:column;}
+.card{width:100%;height:100%;perspective:600px;position:relative;touch-action:pan-y;}
+.card-inner{width:100%;height:100%;position:absolute;transition:.6s;transform-style:preserve-3d;border-radius:16px;}
+.card-front,.card-back{position:absolute;width:100%;height:100%;display:flex;justify-content:center;align-items:center;border-radius:16px;padding:5px;text-align:center;backface-visibility:hidden;font-weight:bold;}
+.card-front{background:var(--cardFront)}
+.card-back{background:var(--cardBack);transform:rotateY(180deg)}
+.btnRow{display:flex;gap:4px;margin-top:6px}
+button{padding:6px 12px;border:none;border-radius:12px;background:var(--btn);color:var(--btnText);cursor:pointer}
+.control-row{display:flex;justify-content:center;gap:6px;flex-wrap:wrap;margin-bottom:10px;}
+</style>
+</head>
+<body>
+
+<h2>🧠 Memory Path Infinite</h2>
+
+<div class="control-row">
+ <input type="file" id="upload" accept=".xlsx">
+ <button onclick="toggleDark()">🌙 다크모드</button>
+ <button onclick="shuffleToggle()">🔀 랜덤</button>
+ <button onclick="toggleFullscreen()">🖥 전체화면</button>
+</div>
+
+<!-- GitHub 동기화 버튼 -->
+<div class="control-row">
+ <button onclick="GitHubSync.syncToGitHub()">🔼 GitHub로 올리기</button>
+ <button onclick="GitHubSync.syncFromGitHub()">🔽 GitHub에서 내려받기</button>
+</div>
+
+<div class="tabs">
+ <div class="tab active" onclick="switchTab('learn')">현재 학습</div>
+ <div class="tab" onclick="switchTab('sessions')">세션</div>
+ <div class="tab" onclick="switchTab('completed')">완료 단어</div>
+</div>
+
+<div id="learn" class="panel active">
+ <div class="control-row">
+  <input id="sessionName" placeholder="세션 이름">
+  <button onclick="saveSession()">학습 저장</button>
+ </div>
+ <div class="grid" id="grid"></div>
+</div>
+
+<div id="sessions" class="panel">
+ <div class="control-row">
+  <select id="sessionList"></select>
+  <button onclick="loadSession()">불러오기</button>
+  <button onclick="deleteSession()">삭제</button>
+  <button onclick="exportBackup()">전체 백업</button>
+  <button onclick="document.getElementById('importBackup').click()">백업 불러오기</button>
+  <input type="file" id="importBackup" accept=".json" style="display:none">
+ </div>
+</div>
+
+<div id="completed" class="panel">
+ <div class="control-row">
+  <select id="completedList"></select>
+  <button onclick="loadCompletedSession()">학습</button>
+  <input id="completedName" placeholder="완료 세션 이름">
+  <button onclick="saveCompletedSession()">저장</button>
+  <button onclick="deleteCompletedSession()">삭제</button>
+ </div>
+</div>
+
+<script src="githubsync.js" defer></script>
+<script>
+const layout=[5,5,5,5];
+const maxStep=20;
+let words=[],positions=[],completedWords=[],originalWords=[],isShuffled=false;
+
+function shuffleToggle(){
+ if(!words.length) return;
+ if(!isShuffled){ originalWords=JSON.parse(JSON.stringify(words));
+   words.sort(()=>Math.random()-0.5); positions=words.map(()=>0); isShuffled=true;
+ }else{ words=JSON.parse(JSON.stringify(originalWords)); positions=words.map(()=>0); isShuffled=false;}
+ render();
+}
+
+function toggleDark(){document.body.classList.toggle("dark");localStorage.setItem("darkMode",document.body.classList.contains("dark"));}
+function toggleFullscreen(){if(!document.fullscreenElement){document.documentElement.requestFullscreen();}else{document.exitFullscreen();}}
+function switchTab(id){document.querySelectorAll(".tab").forEach(t=>t.classList.remove("active"));event.target.classList.add("active");document.querySelectorAll(".panel").forEach(p=>p.classList.remove("active"));document.getElementById(id).classList.add("active");}
+
+upload.addEventListener("change",e=>{
+ const file=e.target.files[0];
+ const reader=new FileReader();
+ reader.onload=ev=>{
+  const data=new Uint8Array(ev.target.result);
+  const wb=XLSX.read(data,{type:"array"});
+  const sheet=wb.Sheets[wb.SheetNames[0]];
+  const json=XLSX.utils.sheet_to_json(sheet);
+  words=json.map(r=>{const k=Object.keys(r);return{word:r[k[0]],meaning:r[k[1]]};});
+  originalWords=JSON.parse(JSON.stringify(words));
+  positions=words.map(()=>0); completedWords=[]; saveState(); render();
+ };
+ reader.readAsArrayBuffer(file);
+});
+
+function moveCard(i,step){
+ if(step>0){ positions[i]++; if(positions[i]>=maxStep){const w=words[i]; if(!completedWords.some(c=>c.word===w.word)) completedWords.push(w); positions[i]=maxStep;}
+ }else positions[i]=0; saveState(); render();
+}
+
+function render(){
+ const grid=document.getElementById("grid"); grid.innerHTML=""; let stepIndex=0;
+ layout.forEach(rc=>{ const row=document.createElement("div"); row.className="row";
+  for(let i=0;i<rc;i++){ const slot=document.createElement("div"); slot.className="slot"; const idx=positions.findIndex(p=>p===stepIndex);
+   const w=idx!==-1?words[idx]:null; if(w){
+    const card=document.createElement("div"); card.className="card"; const inner=document.createElement("div"); inner.className="card-inner";
+    const f=document.createElement("div"); f.className="card-front"; f.innerText=w.word;
+    const b=document.createElement("div"); b.className="card-back"; b.innerText=w.meaning;
+    inner.append(f,b); card.appendChild(inner); slot.appendChild(card);
+    card.onclick=()=>inner.style.transform=inner.style.transform==="rotateY(180deg)"?"":"rotateY(180deg)";
+    let startX=0;
+    card.addEventListener("touchstart",e=>startX=e.touches[0].clientX);
+    card.addEventListener("touchend",e=>{const diff=e.changedTouches[0].clientX-startX; if(diff>40) moveCard(idx,1); if(diff<-40) moveCard(idx,-1);});
+    const btnRow=document.createElement("div"); btnRow.className="btnRow";
+    const ok=document.createElement("button"); ok.textContent="✔️"; ok.onclick=e=>{e.stopPropagation(); moveCard(idx,1)};
+    const no=document.createElement("button"); no.textContent="❌"; no.onclick=e=>{e.stopPropagation(); moveCard(idx,-1)};
+    btnRow.append(ok,no); slot.appendChild(btnRow);
+   }
+   row.appendChild(slot); stepIndex++;
+  }
+  grid.appendChild(row);
+ });
+ autoScaleGrid();
+}
+
+function saveState(){localStorage.setItem("memoryPathState",JSON.stringify({words,positions,completedWords,originalWords}));}
+
+function saveSession(){const name=sessionName.value;if(!name) return alert("이름 입력"); const sessions=JSON.parse(localStorage.getItem("sessions")||"{}"); sessions[name]={words,positions,completedWords}; localStorage.setItem("sessions",JSON.stringify(sessions)); loadSessionList();}
+function loadSession(){const sessions=JSON.parse(localStorage.getItem("sessions")||"{}"); const s=sessions[sessionList.value]; if(!s) return; words=s.words; positions=s.positions; completedWords=s.completedWords; render();}
+function deleteSession(){const sessions=JSON.parse(localStorage.getItem("sessions")||"{}"); delete sessions[sessionList.value]; localStorage.setItem("sessions",JSON.stringify(sessions)); loadSessionList();}
+function loadSessionList(){const sessions=JSON.parse(localStorage.getItem("sessions")||"{}"); sessionList.innerHTML=""; Object.keys(sessions).forEach(k=>{const o=document.createElement("option"); o.value=k; o.textContent=k; sessionList.appendChild(o);});}
+
+function saveCompletedSession(){const name=completedName.value;if(!completedWords.length) return alert("완료 없음"); const sessions=JSON.parse(localStorage.getItem("completedSessions")||"{}"); sessions[name]={words:completedWords,positions:completedWords.map(()=>0)}; localStorage.setItem("completedSessions",JSON.stringify(sessions)); loadCompletedList();}
+function loadCompletedSession(){const sessions=JSON.parse(localStorage.getItem("completedSessions")||"{}"); const s=sessions[completedList.value]; if(!s) return; words=s.words; positions=s.positions; completedWords=[]; render();}
+function deleteCompletedSession(){const sessions=JSON.parse(localStorage.getItem("completedSessions")||"{}"); delete sessions[completedList.value]; localStorage.setItem("completedSessions",JSON.stringify(sessions)); loadCompletedList();}
+function loadCompletedList(){const sessions=JSON.parse(localStorage.getItem("completedSessions")||"{}"); completedList.innerHTML=""; Object.keys(sessions).forEach(k=>{const o=document.createElement("option"); o.value=k; o.textContent=k; completedList.appendChild(o);});}
+
+function exportBackup(){const data={sessions:JSON.parse(localStorage.getItem("sessions")||"{}"),completedSessions:JSON.parse(localStorage.getItem("completedSessions")||"{}")}; const blob=new Blob([JSON.stringify(data,null,2)],{type:"application/json"}); const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download="MemoryPath_Backup.json"; a.click();}
+importBackup.addEventListener("change",e=>{const file=e.target.files[0]; const reader=new FileReader(); reader.onload=ev=>{const data=JSON.parse(ev.target.result); if(data.sessions) localStorage.setItem("sessions",JSON.stringify(data.sessions)); if(data.completedSessions) localStorage.setItem("completedSessions",JSON.stringify(data.completedSessions)); loadSessionList(); loadCompletedList(); alert("불러오기 완료");}; reader.readAsText(file);});
+
+function autoScaleGrid(){ const grid=document.querySelector(".grid"); const totalW=120*5; const totalH=160*4; const scaleW=(window.innerWidth*0.95)/totalW; const scaleH=(window.innerHeight-180)/totalH; let scale=Math.min(scaleW,scaleH); const isIPad=/iPad|Macintosh/.test(navigator.userAgent)&&window.innerWidth>768; if(isIPad) scale*=0.95; if(scale>1) scale=1; if(scale<0.45) scale=0.45; grid.style.transform=`scale(${scale})`;}
+
+window.addEventListener("resize",autoScaleGrid);
+
+window.onload=()=>{
+ const saved=localStorage.getItem("memoryPathState");
+ if(saved){ const s=JSON.parse(saved); words=s.words||[]; positions=s.positions||[]; completedWords=s.completedWords||[]; originalWords=s.originalWords||[];}
+ if(localStorage.getItem("darkMode")==="true") document.body.classList.add("dark");
+ render(); loadSessionList(); loadCompletedList();
+};
+</script>
+</body>
+</html>
