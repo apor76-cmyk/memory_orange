@@ -5,31 +5,18 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Memory Path Infinite</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<!-- githubSync.js 파일을 HTML과 같은 폴더에 두세요 -->
 <script src="githubSync.js" defer></script>
 
 <style>
 :root{
- --bg:#FFF8F0;
- --panel:#FFF1E6;
- --cardFront:#DFF2BF;
- --cardBack:#BEE3F8;
- --text:#3B3B3B;
- --btn:#FF9900;
- --btnText:#fff;
- --border:#FFB366;
+ --bg:#FFF8F0; --panel:#FFF1E6; --cardFront:#DFF2BF; --cardBack:#BEE3F8; --text:#3B3B3B;
+ --btn:#FF9900; --btnText:#fff; --border:#FFB366;
 }
 body.dark{
- --bg:#1F1A17;
- --panel:#2B2724;
- --cardFront:#3B5D3B;
- --cardBack:#1E3A5F;
- --text:#EEE;
- --btn:#FF9900;
- --btnText:#1F1A17;
- --border:#FF9900;
+ --bg:#1F1A17; --panel:#2B2724; --cardFront:#3B5D3B; --cardBack:#1E3A5F; --text:#EEE;
+ --btn:#FF9900; --btnText:#1F1A17; --border:#FF9900;
 }
-body{font-family:Arial, sans-serif;margin:0;padding:20px;text-align:center;background:var(--bg);color:var(--text);}
+body{font-family:Arial,sans-serif;margin:0;padding:20px;text-align:center;background:var(--bg);color:var(--text);}
 .tabs{display:flex;gap:6px;justify-content:center;margin-bottom:10px}
 .tab{padding:8px 14px;border-radius:12px;background:var(--panel);cursor:pointer}
 .tab.active{background:var(--btn);color:var(--btnText)}
@@ -96,42 +83,16 @@ button{padding:6px 12px;border:none;border-radius:12px;background:var(--btn);col
 </div>
 
 <script>
-/* ================= Memory Path Core ================= */
+// ================= Core =================
 const layout=[5,5,5,5]; const maxStep=20;
 let words=[], positions=[], completedWords=[], originalWords=[];
 let isShuffled=false;
 
-/* 랜덤 */
-function shuffleToggle(){
- if(!words.length) return;
- if(!isShuffled){
-   originalWords=JSON.parse(JSON.stringify(words));
-   words.sort(()=>Math.random()-0.5);
-   positions=words.map(()=>0);
-   isShuffled=true;
- }else{
-   words=JSON.parse(JSON.stringify(originalWords));
-   positions=words.map(()=>0);
-   isShuffled=false;
- }
- render();
-}
-
-/* 다크모드 */
-function toggleDark(){document.body.classList.toggle("dark");localStorage.setItem("darkMode",document.body.classList.contains("dark"));}
-
-/* 전체화면 */
+function shuffleToggle(){ if(!words.length) return; if(!isShuffled){originalWords=JSON.parse(JSON.stringify(words)); words.sort(()=>Math.random()-0.5); positions=words.map(()=>0); isShuffled=true;}else{words=JSON.parse(JSON.stringify(originalWords)); positions=words.map(()=>0); isShuffled=false;} render();}
+function toggleDark(){document.body.classList.toggle("dark"); localStorage.setItem("darkMode",document.body.classList.contains("dark"));}
 function toggleFullscreen(){if(!document.fullscreenElement) document.documentElement.requestFullscreen(); else document.exitFullscreen();}
+function switchTab(id,evt){document.querySelectorAll(".tab").forEach(t=>t.classList.remove("active")); evt.currentTarget.classList.add("active"); document.querySelectorAll(".panel").forEach(p=>p.classList.remove("active")); document.getElementById(id).classList.add("active");}
 
-/* 탭 전환 */
-function switchTab(id, evt){
- document.querySelectorAll(".tab").forEach(t=>t.classList.remove("active"));
- evt.currentTarget.classList.add("active");
- document.querySelectorAll(".panel").forEach(p=>p.classList.remove("active"));
- document.getElementById(id).classList.add("active");
-}
-
-/* 엑셀 업로드 */
 const upload=document.getElementById("upload");
 upload.addEventListener("change", e=>{
  const file=e.target.files[0]; const reader=new FileReader();
@@ -142,30 +103,21 @@ upload.addEventListener("change", e=>{
   const json=XLSX.utils.sheet_to_json(sheet);
   words=json.map(r=>{const k=Object.keys(r); return {word:r[k[0]], meaning:r[k[1]]};});
   originalWords=JSON.parse(JSON.stringify(words));
-  positions=words.map(()=>0);
-  completedWords=[];
-  saveState();
-  render();
+  positions=words.map(()=>0); completedWords=[];
+  saveState(); render();
  };
  reader.readAsArrayBuffer(file);
 });
 
-/* 카드 이동, 렌더링, 스와이프, 버튼 */
-function moveCard(i, step){
- if(step>0){positions[i]++; if(positions[i]>=maxStep){const w=words[i]; if(!completedWords.some(c=>c.word===w.word)) completedWords.push(w); positions[i]=maxStep;}}
- else positions[i]=0;
- saveState(); render();
-}
+function moveCard(i,step){ if(step>0){positions[i]++; if(positions[i]>=maxStep){const w=words[i]; if(!completedWords.some(c=>c.word===w.word)) completedWords.push(w); positions[i]=maxStep;}} else positions[i]=0; saveState(); render();}
 
 function render(){
  const grid=document.getElementById("grid"); grid.innerHTML="";
- let stepIndex=0;
- layout.forEach(rc=>{
+ let stepIndex=0; layout.forEach(rc=>{
   const row=document.createElement("div"); row.className="row";
   for(let i=0;i<rc;i++){
    const slot=document.createElement("div"); slot.className="slot";
-   const idx=positions.findIndex(p=>p===stepIndex);
-   const w=idx!==-1?words[idx]:null;
+   const idx=positions.findIndex(p=>p===stepIndex); const w=idx!==-1?words[idx]:null;
    if(w){
     const card=document.createElement("div"); card.className="card";
     const inner=document.createElement("div"); inner.className="card-inner";
@@ -188,20 +140,11 @@ function render(){
  autoScaleGrid();
 }
 
-/* 자동 스케일 */
-function autoScaleGrid(){
- const grid=document.querySelector(".grid");
- const totalW=120*5; const totalH=160*4;
- let scale=Math.min((window.innerWidth*0.95)/totalW,(window.innerHeight-180)/totalH);
- if(scale>1) scale=1; if(scale<0.45) scale=0.45;
- grid.style.transform=`scale(${scale})`;
-}
+function autoScaleGrid(){ const grid=document.querySelector(".grid"); let scale=Math.min((window.innerWidth*0.95)/(120*5),(window.innerHeight-180)/(160*4)); if(scale>1) scale=1; if(scale<0.45) scale=0.45; grid.style.transform=`scale(${scale})`; }
 window.addEventListener("resize", autoScaleGrid);
-
-/* 상태 저장 */
 function saveState(){localStorage.setItem("memoryPathState",JSON.stringify({words,positions,completedWords,originalWords}));}
 
-/* 세션 & 완료단어 & 백업 */
+// ================= Session & Completed =================
 function saveSession(){const name=sessionName.value; if(!name) return alert("이름 입력"); const sessions=JSON.parse(localStorage.getItem("sessions")||"{}"); sessions[name]={words,positions,completedWords}; localStorage.setItem("sessions",JSON.stringify(sessions)); loadSessionList();}
 function loadSession(){const sessions=JSON.parse(localStorage.getItem("sessions")||"{}"); const s=sessions[sessionList.value]; if(!s) return; words=s.words; positions=s.positions; completedWords=s.completedWords; render();}
 function deleteSession(){const sessions=JSON.parse(localStorage.getItem("sessions")||"{}"); delete sessions[sessionList.value]; localStorage.setItem("sessions",JSON.stringify(sessions)); loadSessionList();}
@@ -215,31 +158,21 @@ function loadCompletedList(){const sessions=JSON.parse(localStorage.getItem("com
 function exportBackup(){const data={sessions:JSON.parse(localStorage.getItem("sessions")||"{}"), completedSessions:JSON.parse(localStorage.getItem("completedSessions")||"{}")}; const blob=new Blob([JSON.stringify(data,null,2)],{type:"application/json"}); const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download="MemoryPath_Backup.json"; a.click();}
 importBackup.addEventListener("change", e=>{const file=e.target.files[0]; const reader=new FileReader(); reader.onload=ev=>{const data=JSON.parse(ev.target.result); if(data.sessions) localStorage.setItem("sessions",JSON.stringify(data.sessions)); if(data.completedSessions) localStorage.setItem("completedSessions",JSON.stringify(data.completedSessions)); loadSessionList(); loadCompletedList(); alert("불러오기 완료");}; reader.readAsText(file);});
 
-/* ================= GitHub 동기화 버튼 ================= */
+// ================= GitHub Sync Button =================
 async function githubSyncPrompt(){
- if(typeof GitHubSync==='undefined'){
-   alert("GitHubSync.js 로드 실패. 파일 경로 확인 필요");
-   return;
- }
- // 토큰 입력창이 항상 뜨도록 getToken() 사용
- if(!localStorage.getItem("GH_TOKEN")){
-   const token = prompt("GitHub Token 입력 (한 번만 입력)");
-   if(token) localStorage.setItem("GH_TOKEN", token);
-   else return alert("GitHub Token 필요");
- }
+ if(typeof GitHubSync==='undefined'){ alert("GitHubSync.js 로드 실패. 파일 경로 확인 필요"); return; }
+ if(!localStorage.getItem("GH_TOKEN")){ const token=prompt("GitHub Token 입력 (한 번만 입력)"); if(token) localStorage.setItem("GH_TOKEN",token); else return alert("GitHub Token 필요"); }
  await GitHubSync.syncToGitHub();
  await GitHubSync.syncFromGitHub();
  alert("✅ GitHub 동기화 완료!");
 }
 
-/* 초기화 */
+// ================= 초기화 =================
 window.addEventListener("load", ()=>{
- const saved = localStorage.getItem("memoryPathState");
+ const saved=localStorage.getItem("memoryPathState");
  if(saved){ const s=JSON.parse(saved); words=s.words||[]; positions=s.positions||[]; completedWords=s.completedWords||[]; originalWords=s.originalWords||[];}
  if(localStorage.getItem("darkMode")==="true") document.body.classList.add("dark");
- render();
- loadSessionList();
- loadCompletedList();
+ render(); loadSessionList(); loadCompletedList();
 });
 </script>
 </body>
