@@ -86,85 +86,97 @@ button{padding:6px 12px;border:none;border-radius:12px;background:var(--btn);col
 </div>
 
 <script>
-// ---------------- GitHubSync ----------------
-class GitHubSync {
-  static tokenKey = "githubToken";
-  static repoOwner = "";
-  static repoName = "";
-  static branch = "main";
-  static filePath = "memorypath_backup.json";
+// ================= GitHub Sync =================
+const GITHUB = {
+  user: "apor76-cmyk",       // 본인 GitHub ID
+  repo: "memory_dark",        // repo 이름
+  path: "memory_sync.json"    // 파일명
+};
 
-  static selectRepo() {
-    if(!GitHubSync.repoOwner) {
-      GitHubSync.repoOwner = prompt("GitHub ID를 입력하세요:", "YOUR_GITHUB_ID");
-    }
-    if(!GitHubSync.repoName) {
-      GitHubSync.repoName = prompt("업로드할 저장소 이름을 입력하세요:", "YOUR_REPO_NAME");
-    }
+const GH_API = `https://api.github.com/repos/${GITHUB.user}/${GITHUB.repo}/contents/${GITHUB.path}`;
+const GH_RAW = `https://raw.githubusercontent.com/${GITHUB.user}/${GITHUB.repo}/main/${GITHUB.path}`;
+
+function getToken() {
+  let token = localStorage.getItem("GH_TOKEN");
+  if (!token) {
+    token = prompt("GitHub Token 입력 (repo 권한 필요)");
+    if (token) localStorage.setItem("GH_TOKEN", token);
   }
-
-  static async getToken() {
-    let token = localStorage.getItem(GitHubSync.tokenKey);
-    if(!token){
-      token = prompt("GitHub Personal Access Token을 입력하세요.\n권한: repo (읽기/쓰기)");
-      if(!token) throw "토큰이 입력되지 않았습니다.";
-      localStorage.setItem(GitHubSync.tokenKey, token);
-    }
-    return token;
-  }
-
-  static async syncToGitHub() {
-    try{
-      const token = await GitHubSync.getToken();
-      const data = {
-        sessions: JSON.parse(localStorage.getItem("sessions")||"{}"),
-        completedSessions: JSON.parse(localStorage.getItem("completedSessions")||"{}")
-      };
-      const content = btoa(unescape(encodeURIComponent(JSON.stringify(data,null,2))));
-
-      // 1. 파일 존재 확인
-      let sha;
-      const checkRes = await fetch(`https://api.github.com/repos/${GitHubSync.repoOwner}/${GitHubSync.repoName}/contents/${GitHubSync.filePath}?ref=${GitHubSync.branch}`, {
-        headers: {Authorization:"token "+token}
-      });
-      if(checkRes.ok){
-        const existing = await checkRes.json();
-        sha = existing.sha;
-      }
-
-      // 2. 업로드/업데이트
-      const res = await fetch(`https://api.github.com/repos/${GitHubSync.repoOwner}/${GitHubSync.repoName}/contents/${GitHubSync.filePath}`, {
-        method: "PUT",
-        headers: {Authorization:"token "+token,"Content-Type":"application/json"},
-        body: JSON.stringify({message:"MemoryPath Backup", content:content, branch:GitHubSync.branch, ...(sha ? {sha} : {})})
-      });
-      if(!res.ok) throw "업로드 실패";
-      alert("✅ GitHub 업로드 완료!");
-    } catch(e){ alert("❌ 오류: "+e); }
-  }
-
-  static async syncFromGitHub() {
-    try{
-      const token = await GitHubSync.getToken();
-      const res = await fetch(`https://api.github.com/repos/${GitHubSync.repoOwner}/${GitHubSync.repoName}/contents/${GitHubSync.filePath}?ref=${GitHubSync.branch}`,{
-        headers:{Authorization:"token "+token}
-      });
-      if(!res.ok) throw "파일을 불러오지 못했습니다.";
-      const data = await res.json();
-      const content = JSON.parse(decodeURIComponent(escape(atob(data.content))));
-      if(content.sessions) localStorage.setItem("sessions",JSON.stringify(content.sessions));
-      if(content.completedSessions) localStorage.setItem("completedSessions",JSON.stringify(content.completedSessions));
-      alert("✅ GitHub에서 불러오기 완료!");
-      loadSessionList();
-      loadCompletedList();
-    } catch(e){ alert("❌ 오류: "+e); }
-  }
-
-  static clearToken(){ localStorage.removeItem(GitHubSync.tokenKey); alert("토큰 삭제됨"); }
+  return token;
 }
-window.GitHubSync = GitHubSync;
 
-// ---------------- Memory Path Infinite 기존 코드 ----------------
+function getSyncData() {
+  return {
+    memoryPathState: localStorage.getItem("memoryPathState") || "{}",
+    sessions: localStorage.getItem("sessions") || "{}",
+    completedSessions: localStorage.getItem("completedSessions") || "{}",
+    darkMode: localStorage.getItem("darkMode") || "false"
+  };
+}
+
+function mergeJSON(localStr, remoteStr) {
+  try {
+    const local = JSON.parse(localStr||"{}");
+    const remote = JSON.parse(remoteStr||"{}");
+    return JSON.stringify({...remote, ...local});
+  } catch { return localStr||"{}"; }
+}
+
+async function syncFromGitHub() {
+  try {
+    const res = await fetch(GH_RAW + "?t=" + Date.now());
+    if (!res.ok) return;
+    const remoteData = await res.json();
+    const localData = getSyncData();
+    const merged = {
+      memoryPathState: mergeJSON(localData.memoryPathState, remoteData.memoryPathState),
+      sessions: mergeJSON(localData.sessions, remoteData.sessions),
+      completedSessions: mergeJSON(localData.completedSessions, remoteData.completedSessions),
+      darkMode: remoteData.darkMode || localData.darkMode
+    };
+    applySyncData(merged);
+    alert("✅ GitHub 데이터 내려받기 완료!");
+    if(typeof loadSessionList==="function") loadSessionList();
+    if(typeof loadCompletedList==="function") loadCompletedList();
+  } catch(e){ console.log(e); alert("❌ GitHub 내려받기 실패"); }
+}
+
+async function syncToGitHub() {
+  try {
+    const token = getToken();
+    if (!token) return;
+
+    const data = getSyncData();
+    let sha = null;
+
+    const fileRes = await fetch(GH_API, { headers:{Authorization:`token ${token}`} });
+    if(fileRes.ok) {
+      const fileData = await fileRes.json();
+      sha = fileData.sha;
+    }
+
+    const content = btoa(unescape(encodeURIComponent(JSON.stringify(data,null,2))));
+    await fetch(GH_API,{
+      method:"PUT",
+      headers:{Authorization:`token ${token}`,"Content-Type":"application/json"},
+      body: JSON.stringify({message:"auto sync", content, ...(sha?{sha}:{})})
+    });
+
+    alert("✅ GitHub 데이터 올리기 완료!");
+  } catch(e){ console.log(e); alert("❌ GitHub 올리기 실패"); }
+}
+
+function applySyncData(data){
+  if(!data) return;
+  if(data.memoryPathState) localStorage.setItem("memoryPathState", data.memoryPathState);
+  if(data.sessions) localStorage.setItem("sessions", data.sessions);
+  if(data.completedSessions) localStorage.setItem("completedSessions", data.completedSessions);
+  if(data.darkMode) localStorage.setItem("darkMode", data.darkMode);
+}
+
+window.GitHubSync = { syncToGitHub, syncFromGitHub, clearToken:()=>{localStorage.removeItem("GH_TOKEN"); alert("토큰 삭제됨");} };
+
+// ================= Memory Path Infinite =================
 const layout=[5,5,5,5];
 const maxStep=20;
 let words=[],positions=[],completedWords=[],originalWords=[],isShuffled=false;
@@ -190,44 +202,13 @@ upload.addEventListener("change",e=>{
 });
 
 function moveCard(i,step){if(step>0){positions[i]++; if(positions[i]>=maxStep){const w=words[i]; if(!completedWords.some(c=>c.word===w.word)) completedWords.push(w); positions[i]=maxStep;}}else positions[i]=0; saveState(); render();}
-
-function render(){
- const grid=document.getElementById("grid"); grid.innerHTML=""; let stepIndex=0;
- layout.forEach(rc=>{
-  const row=document.createElement("div"); row.className="row";
-  for(let i=0;i<rc;i++){
-   const slot=document.createElement("div"); slot.className="slot"; 
-   const idx=positions.findIndex(p=>p===stepIndex);
-   const w=idx!==-1?words[idx]:null;
-   if(w){
-    const card=document.createElement("div"); card.className="card"; 
-    const inner=document.createElement("div"); inner.className="card-inner";
-    const f=document.createElement("div"); f.className="card-front"; f.innerText=w.word;
-    const b=document.createElement("div"); b.className="card-back"; b.innerText=w.meaning;
-    inner.append(f,b); card.appendChild(inner); slot.appendChild(card);
-    card.onclick=()=>inner.style.transform=inner.style.transform==="rotateY(180deg)"?"":"rotateY(180deg)";
-    let startX=0;
-    card.addEventListener("touchstart",e=>startX=e.touches[0].clientX);
-    card.addEventListener("touchend",e=>{const diff=e.changedTouches[0].clientX-startX; if(diff>40) moveCard(idx,1); if(diff<-40) moveCard(idx,-1);});
-    const btnRow=document.createElement("div"); btnRow.className="btnRow";
-    const ok=document.createElement("button"); ok.textContent="✔️"; ok.onclick=e=>{e.stopPropagation(); moveCard(idx,1)};
-    const no=document.createElement("button"); no.textContent="❌"; no.onclick=e=>{e.stopPropagation(); moveCard(idx,-1)};
-    btnRow.append(ok,no); slot.appendChild(btnRow);
-   }
-   row.appendChild(slot); stepIndex++;
-  }
-  grid.appendChild(row);
- });
- autoScaleGrid();
-}
+function render(){const grid=document.getElementById("grid"); grid.innerHTML=""; let stepIndex=0; layout.forEach(rc=>{const row=document.createElement("div"); row.className="row"; for(let i=0;i<rc;i++){const slot=document.createElement("div"); slot.className="slot"; const idx=positions.findIndex(p=>p===stepIndex); const w=idx!==-1?words[idx]:null; if(w){const card=document.createElement("div"); card.className="card"; const inner=document.createElement("div"); inner.className="card-inner"; const f=document.createElement("div"); f.className="card-front"; f.innerText=w.word; const b=document.createElement("div"); b.className="card-back"; b.innerText=w.meaning; inner.append(f,b); card.appendChild(inner); slot.appendChild(card); card.onclick=()=>inner.style.transform=inner.style.transform==="rotateY(180deg)"?"":"rotateY(180deg)"; let startX=0; card.addEventListener("touchstart",e=>startX=e.touches[0].clientX); card.addEventListener("touchend",e=>{const diff=e.changedTouches[0].clientX-startX;if(diff>40) moveCard(idx,1); if(diff<-40) moveCard(idx,-1);}); const btnRow=document.createElement("div"); btnRow.className="btnRow"; const ok=document.createElement("button"); ok.textContent="✔️"; ok.onclick=e=>{e.stopPropagation(); moveCard(idx,1)}; const no=document.createElement("button"); no.textContent="❌"; no.onclick=e=>{e.stopPropagation(); moveCard(idx,-1)}; btnRow.append(ok,no); slot.appendChild(btnRow);} row.appendChild(slot); stepIndex++;} grid.appendChild(row);}); autoScaleGrid();}
 
 function saveState(){localStorage.setItem("memoryPathState",JSON.stringify({words,positions,completedWords,originalWords}));}
-
 function saveSession(){const name=sessionName.value;if(!name) return alert("이름 입력"); const sessions=JSON.parse(localStorage.getItem("sessions")||"{}"); sessions[name]={words,positions,completedWords}; localStorage.setItem("sessions",JSON.stringify(sessions)); loadSessionList();}
 function loadSession(){const sessions=JSON.parse(localStorage.getItem("sessions")||"{}"); const s=sessions[sessionList.value]; if(!s) return; words=s.words; positions=s.positions; completedWords=s.completedWords; render();}
 function deleteSession(){const sessions=JSON.parse(localStorage.getItem("sessions")||"{}"); delete sessions[sessionList.value]; localStorage.setItem("sessions",JSON.stringify(sessions)); loadSessionList();}
 function loadSessionList(){const sessions=JSON.parse(localStorage.getItem("sessions")||"{}"); sessionList.innerHTML=""; Object.keys(sessions).forEach(k=>{const o=document.createElement("option"); o.value=k; o.textContent=k; sessionList.appendChild(o);});}
-
 function saveCompletedSession(){const name=completedName.value;if(!completedWords.length) return alert("완료 없음"); const sessions=JSON.parse(localStorage.getItem("completedSessions")||"{}"); sessions[name]={words:completedWords,positions:completedWords.map(()=>0)}; localStorage.setItem("completedSessions",JSON.stringify(sessions)); loadCompletedList();}
 function loadCompletedSession(){const sessions=JSON.parse(localStorage.getItem("completedSessions")||"{}"); const s=sessions[completedList.value]; if(!s) return; words=s.words; positions=s.positions; completedWords=[]; render();}
 function deleteCompletedSession(){const sessions=JSON.parse(localStorage.getItem("completedSessions")||"{}"); delete sessions[completedList.value]; localStorage.setItem("completedSessions",JSON.stringify(sessions)); loadCompletedList();}
@@ -241,7 +222,6 @@ function autoScaleGrid(){ const grid=document.querySelector(".grid"); const tota
 window.addEventListener("resize",autoScaleGrid);
 
 window.onload=()=>{
- GitHubSync.selectRepo();
  const saved=localStorage.getItem("memoryPathState");
  if(saved){ const s=JSON.parse(saved); words=s.words||[]; positions=s.positions||[]; completedWords=s.completedWords||[]; originalWords=s.originalWords||[];}
  if(localStorage.getItem("darkMode")==="true") document.body.classList.add("dark");
