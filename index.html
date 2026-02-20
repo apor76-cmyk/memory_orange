@@ -121,18 +121,25 @@ class GitHubSync {
         completedSessions: JSON.parse(localStorage.getItem("completedSessions")||"{}")
       };
       const content = btoa(unescape(encodeURIComponent(JSON.stringify(data,null,2))));
-      const shaRes = await fetch(`https://api.github.com/repos/${GitHubSync.repoOwner}/${GitHubSync.repoName}/contents/${GitHubSync.filePath}?ref=${GitHubSync.branch}`,{
-        headers:{Authorization:"token "+token}
+
+      // 1. 파일 존재 확인
+      let sha;
+      const checkRes = await fetch(`https://api.github.com/repos/${GitHubSync.repoOwner}/${GitHubSync.repoName}/contents/${GitHubSync.filePath}?ref=${GitHubSync.branch}`, {
+        headers: {Authorization:"token "+token}
       });
-      const shaData = shaRes.status===200 ? await shaRes.json() : null;
-      const sha = shaData ? shaData.sha : undefined;
-      const res = await fetch(`https://api.github.com/repos/${GitHubSync.repoOwner}/${GitHubSync.repoName}/contents/${GitHubSync.filePath}`,{
-        method:"PUT",
-        headers:{Authorization:"token "+token,"Content-Type":"application/json"},
+      if(checkRes.ok){
+        const existing = await checkRes.json();
+        sha = existing.sha;
+      }
+
+      // 2. 업로드/업데이트
+      const res = await fetch(`https://api.github.com/repos/${GitHubSync.repoOwner}/${GitHubSync.repoName}/contents/${GitHubSync.filePath}`, {
+        method: "PUT",
+        headers: {Authorization:"token "+token,"Content-Type":"application/json"},
         body: JSON.stringify({message:"MemoryPath Backup", content:content, branch:GitHubSync.branch, ...(sha ? {sha} : {})})
       });
       if(!res.ok) throw "업로드 실패";
-      alert("✅ GitHub로 업로드 완료!");
+      alert("✅ GitHub 업로드 완료!");
     } catch(e){ alert("❌ 오류: "+e); }
   }
 
@@ -148,16 +155,16 @@ class GitHubSync {
       if(content.sessions) localStorage.setItem("sessions",JSON.stringify(content.sessions));
       if(content.completedSessions) localStorage.setItem("completedSessions",JSON.stringify(content.completedSessions));
       alert("✅ GitHub에서 불러오기 완료!");
-      if(typeof loadSessionList==="function") loadSessionList();
-      if(typeof loadCompletedList==="function") loadCompletedList();
+      loadSessionList();
+      loadCompletedList();
     } catch(e){ alert("❌ 오류: "+e); }
   }
 
-  static clearToken(){ localStorage.removeItem(GitHubSync.tokenKey); alert("토큰이 삭제되었습니다."); }
+  static clearToken(){ localStorage.removeItem(GitHubSync.tokenKey); alert("토큰 삭제됨"); }
 }
 window.GitHubSync = GitHubSync;
 
-// ---------------- 기존 Memory Path Infinite ----------------
+// ---------------- Memory Path Infinite 기존 코드 ----------------
 const layout=[5,5,5,5];
 const maxStep=20;
 let words=[],positions=[],completedWords=[],originalWords=[],isShuffled=false;
@@ -215,6 +222,7 @@ function render(){
 }
 
 function saveState(){localStorage.setItem("memoryPathState",JSON.stringify({words,positions,completedWords,originalWords}));}
+
 function saveSession(){const name=sessionName.value;if(!name) return alert("이름 입력"); const sessions=JSON.parse(localStorage.getItem("sessions")||"{}"); sessions[name]={words,positions,completedWords}; localStorage.setItem("sessions",JSON.stringify(sessions)); loadSessionList();}
 function loadSession(){const sessions=JSON.parse(localStorage.getItem("sessions")||"{}"); const s=sessions[sessionList.value]; if(!s) return; words=s.words; positions=s.positions; completedWords=s.completedWords; render();}
 function deleteSession(){const sessions=JSON.parse(localStorage.getItem("sessions")||"{}"); delete sessions[sessionList.value]; localStorage.setItem("sessions",JSON.stringify(sessions)); loadSessionList();}
