@@ -88,75 +88,96 @@ button{padding:6px 12px;border:none;border-radius:12px;background:var(--btn);col
 
 <script>
 /* ================= GitHub Sync ================= */
-const GitHubSync = {
-  user: "apor76-cmyk", // 수정된 ID
-  repo: "memory_orange",
-  path: "memorypath_backup.json",
+const GITHUB = {
+  user: "apor76-cmyk",
+  repo: "memory_dark",
   branch: "main",
-  
-  getToken() {
-    let token = localStorage.getItem("GH_TOKEN");
-    if (!token) {
-      token = prompt("GitHub Token 입력 (최초 1회, public repo 권한)");
-      if(token) localStorage.setItem("GH_TOKEN", token);
-    }
-    return token;
-  },
-
-  async syncToGitHub() {
-    const token = this.getToken();
-    if(!token) return alert("⚠️ 업로드는 토큰이 필요합니다.");
-
-    try{
-      const data = {
-        memoryPathState: localStorage.getItem("memoryPathState")||"{}",
-        sessions: localStorage.getItem("sessions")||"{}",
-        completedSessions: localStorage.getItem("completedSessions")||"{}",
-        darkMode: localStorage.getItem("darkMode")||"false"
-      };
-      const content = btoa(unescape(encodeURIComponent(JSON.stringify(data,null,2))));
-
-      let sha;
-      const resCheck = await fetch(`https://api.github.com/repos/${this.user}/${this.repo}/contents/${this.path}?ref=${this.branch}`, {
-        headers: {Authorization: "token "+token}
-      });
-      if(resCheck.ok){
-        const fileData = await resCheck.json();
-        sha = fileData.sha;
-      }
-
-      const res = await fetch(`https://api.github.com/repos/${this.user}/${this.repo}/contents/${this.path}`, {
-        method:"PUT",
-        headers:{Authorization:"token "+token,"Content-Type":"application/json"},
-        body: JSON.stringify({message:"MemoryPath Backup", content, sha})
-      });
-
-      if(!res.ok) throw "업로드 실패";
-      alert("✅ GitHub로 업로드 완료!");
-
-    } catch(e){ console.log(e); alert("❌ 업로드 실패: "+e); }
-  },
-
-  async syncFromGitHub() {
-    try{
-      const res = await fetch(`https://raw.githubusercontent.com/${this.user}/${this.repo}/main/${this.path}?t=${Date.now()}`);
-      if(!res.ok) throw "파일 없음";
-      const remoteData = await res.json();
-      if(remoteData.memoryPathState) localStorage.setItem("memoryPathState", remoteData.memoryPathState);
-      if(remoteData.sessions) localStorage.setItem("sessions", remoteData.sessions);
-      if(remoteData.completedSessions) localStorage.setItem("completedSessions", remoteData.completedSessions);
-      if(remoteData.darkMode) localStorage.setItem("darkMode", remoteData.darkMode||"false");
-      alert("✅ GitHub에서 내려받기 완료!");
-      loadSessionList(); loadCompletedList();
-    } catch(e){ console.log(e); alert("❌ 내려받기 실패: "+e); }
-  },
-
-  clearToken() { localStorage.removeItem("GH_TOKEN"); alert("토큰이 삭제되었습니다."); }
+  path: "memory_sync.json"
 };
+const GH_API = `https://api.github.com/repos/${GITHUB.user}/${GITHUB.repo}/contents/${GITHUB.path}`;
+const GH_RAW = `https://raw.githubusercontent.com/${GITHUB.user}/${GITHUB.repo}/${GITHUB.branch}/${GITHUB.path}`;
 
-/* ================= Memory Path Infinite ================= */
-const layout=[5,5,5,5];
-const maxStep=20;
+function getToken() {
+  let token = localStorage.getItem("GH_TOKEN");
+  if(!token){
+    token = prompt("GitHub Token 입력 (한 번만 입력, repo 권한 필요)");
+    if(token) localStorage.setItem("GH_TOKEN", token);
+  }
+  return token;
+}
+
+function getSyncData() {
+  return {
+    memoryPathState: localStorage.getItem("memoryPathState") || "{}",
+    sessions: localStorage.getItem("sessions") || "{}",
+    completedSessions: localStorage.getItem("completedSessions") || "{}",
+    darkMode: localStorage.getItem("darkMode") || "false"
+  };
+}
+
+function mergeJSON(localStr, remoteStr) {
+  try { return JSON.stringify({...JSON.parse(remoteStr||"{}"), ...JSON.parse(localStr||"{}")}); }
+  catch{return localStr||"{}";}
+}
+
+async function syncFromGitHub() {
+  try{
+    const res = await fetch(GH_RAW+"?t="+Date.now());
+    if(!res.ok) throw "파일 없음 또는 네트워크 문제";
+    const remoteData = await res.json();
+    const localData = getSyncData();
+
+    const merged = {
+      memoryPathState: mergeJSON(localData.memoryPathState, remoteData.memoryPathState),
+      sessions: mergeJSON(localData.sessions, remoteData.sessions),
+      completedSessions: mergeJSON(localData.completedSessions, remoteData.completedSessions),
+      darkMode: remoteData.darkMode || localData.darkMode
+    };
+
+    applySyncData(merged);
+    render(); loadSessionList(); loadCompletedList();
+    alert("✅ GitHub에서 데이터 내려받기 완료!");
+
+  }catch(e){console.error(e); alert("❌ 내려받기 실패: "+e);}
+}
+
+async function syncToGitHub() {
+  try{
+    const token = getToken();
+    if(!token) return alert("토큰 필요");
+
+    const data = getSyncData();
+    let sha = undefined;
+
+    const check = await fetch(GH_API, {headers:{Authorization:`token ${token}`}});
+    if(check.ok){ const j = await check.json(); sha = j.sha; }
+
+    const content = btoa(unescape(encodeURIComponent(JSON.stringify(data,null,2))));
+
+    const res = await fetch(GH_API,{
+      method:"PUT",
+      headers:{Authorization:`token ${token}`, "Content-Type":"application/json"},
+      body: JSON.stringify({message:"MemoryPath 자동 백업", content, branch:GITHUB.branch, ...(sha?{sha}:{})})
+    });
+
+    if(res.ok) alert("✅ GitHub 업로드 성공!");
+    else{ const err = await res.json(); console.error("업로드 실패:", err); alert("❌ 업로드 실패: "+(err.message||"Unknown"));}
+
+  }catch(e){console.error(e); alert("❌ 업로드 실패: "+e);}
+}
+
+function applySyncData(data){
+  if(!data) return;
+  if(data.memoryPathState) localStorage.setItem("memoryPathState", data.memoryPathState);
+  if(data.sessions) localStorage.setItem("sessions", data.sessions);
+  if(data.completedSessions) localStorage.setItem("completedSessions", data.completedSessions);
+  if(data.darkMode) localStorage.setItem("darkMode", data.darkMode);
+}
+
+window.GitHubSync = {syncToGitHub, syncFromGitHub, clearToken:()=>{localStorage.removeItem("GH_TOKEN"); alert("토큰 삭제됨");}};
+
+/* ================= 기존 Memory Path Infinite ================= */
+const layout=[5,5,5,5], maxStep=20;
 let words=[],positions=[],completedWords=[],originalWords=[],isShuffled=false;
 
 function shuffleToggle(){if(!words.length) return; if(!isShuffled){originalWords=JSON.parse(JSON.stringify(words)); words.sort(()=>Math.random()-0.5); positions=words.map(()=>0); isShuffled=true;} else{words=JSON.parse(JSON.stringify(originalWords)); positions=words.map(()=>0); isShuffled=false;} render();}
@@ -165,22 +186,48 @@ function toggleFullscreen(){if(!document.fullscreenElement){document.documentEle
 function switchTab(id){document.querySelectorAll(".tab").forEach(t=>t.classList.remove("active")); event.target.classList.add("active"); document.querySelectorAll(".panel").forEach(p=>p.classList.remove("active")); document.getElementById(id).classList.add("active");}
 
 upload.addEventListener("change",e=>{
- const file=e.target.files[0];
- const reader=new FileReader();
+ const file=e.target.files[0]; const reader=new FileReader();
  reader.onload=ev=>{
-  const data=new Uint8Array(ev.target.result);
-  const wb=XLSX.read(data,{type:"array"});
-  const sheet=wb.Sheets[wb.SheetNames[0]];
-  const json=XLSX.utils.sheet_to_json(sheet);
-  words=json.map(r=>{const k=Object.keys(r);return{word:r[k[0]],meaning:r[k[1]]};});
-  originalWords=JSON.parse(JSON.stringify(words));
-  positions=words.map(()=>0); completedWords=[]; saveState(); render();
+  const data=new Uint8Array(ev.target.result); const wb=XLSX.read(data,{type:"array"});
+  const sheet=wb.Sheets[wb.SheetNames[0]]; const json=XLSX.utils.sheet_to_json(sheet);
+  words=json.map(r=>{const k=Object.keys(r); return {word:r[k[0]], meaning:r[k[1]]};});
+  originalWords=JSON.parse(JSON.stringify(words)); positions=words.map(()=>0); completedWords=[]; saveState(); render();
  };
  reader.readAsArrayBuffer(file);
 });
 
 function moveCard(i,step){if(step>0){positions[i]++; if(positions[i]>=maxStep){const w=words[i]; if(!completedWords.some(c=>c.word===w.word)) completedWords.push(w); positions[i]=maxStep;}}else positions[i]=0; saveState(); render();}
-function render(){ const grid=document.getElementById("grid"); grid.innerHTML=""; let stepIndex=0; layout.forEach(rc=>{ const row=document.createElement("div"); row.className="row"; for(let i=0;i<rc;i++){ const slot=document.createElement("div"); slot.className="slot"; const idx=positions.findIndex(p=>p===stepIndex); const w=idx!==-1?words[idx]:null; if(w){ const card=document.createElement("div"); card.className="card"; const inner=document.createElement("div"); inner.className="card-inner"; const f=document.createElement("div"); f.className="card-front"; f.innerText=w.word; const b=document.createElement("div"); b.className="card-back"; b.innerText=w.meaning; inner.append(f,b); card.appendChild(inner); slot.appendChild(card); card.onclick=()=>inner.style.transform=inner.style.transform==="rotateY(180deg)"?"":"rotateY(180deg)"; let startX=0; card.addEventListener("touchstart",e=>startX=e.touches[0].clientX); card.addEventListener("touchend",e=>{const diff=e.changedTouches[0].clientX-startX; if(diff>40) moveCard(idx,1); if(diff<-40) moveCard(idx,-1);}); const btnRow=document.createElement("div"); btnRow.className="btnRow"; const ok=document.createElement("button"); ok.textContent="✔️"; ok.onclick=e=>{e.stopPropagation(); moveCard(idx,1)}; const no=document.createElement("button"); no.textContent="❌"; no.onclick=e=>{e.stopPropagation(); moveCard(idx,-1)}; btnRow.append(ok,no); slot.appendChild(btnRow);} row.appendChild(slot); stepIndex++; } grid.appendChild(row);}); autoScaleGrid(); }
+
+function render(){
+ const grid=document.getElementById("grid"); grid.innerHTML=""; let stepIndex=0;
+ layout.forEach(rc=>{
+  const row=document.createElement("div"); row.className="row";
+  for(let i=0;i<rc;i++){
+   const slot=document.createElement("div"); slot.className="slot"; 
+   const idx=positions.findIndex(p=>p===stepIndex);
+   const w=idx!==-1?words[idx]:null;
+   if(w){
+    const card=document.createElement("div"); card.className="card"; 
+    const inner=document.createElement("div"); inner.className="card-inner";
+    const f=document.createElement("div"); f.className="card-front"; f.innerText=w.word;
+    const b=document.createElement("div"); b.className="card-back"; b.innerText=w.meaning;
+    inner.append(f,b); card.appendChild(inner); slot.appendChild(card);
+    card.onclick=()=>inner.style.transform=inner.style.transform==="rotateY(180deg)"?"":"rotateY(180deg)";
+    let startX=0;
+    card.addEventListener("touchstart",e=>startX=e.touches[0].clientX);
+    card.addEventListener("touchend",e=>{const diff=e.changedTouches[0].clientX-startX; if(diff>40) moveCard(idx,1); if(diff<-40) moveCard(idx,-1);});
+    const btnRow=document.createElement("div"); btnRow.className="btnRow";
+    const ok=document.createElement("button"); ok.textContent="✔️"; ok.onclick=e=>{e.stopPropagation(); moveCard(idx,1)};
+    const no=document.createElement("button"); no.textContent="❌"; no.onclick=e=>{e.stopPropagation(); moveCard(idx,-1)};
+    btnRow.append(ok,no); slot.appendChild(btnRow);
+   }
+   row.appendChild(slot); stepIndex++;
+  }
+  grid.appendChild(row);
+ });
+ autoScaleGrid();
+}
+
 function saveState(){localStorage.setItem("memoryPathState",JSON.stringify({words,positions,completedWords,originalWords}));}
 
 function saveSession(){const name=sessionName.value;if(!name) return alert("이름 입력"); const sessions=JSON.parse(localStorage.getItem("sessions")||"{}"); sessions[name]={words,positions,completedWords}; localStorage.setItem("sessions",JSON.stringify(sessions)); loadSessionList();}
@@ -196,9 +243,10 @@ function loadCompletedList(){const sessions=JSON.parse(localStorage.getItem("com
 function exportBackup(){const data={sessions:JSON.parse(localStorage.getItem("sessions")||"{}"),completedSessions:JSON.parse(localStorage.getItem("completedSessions")||"{}")}; const blob=new Blob([JSON.stringify(data,null,2)],{type:"application/json"}); const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download="MemoryPath_Backup.json"; a.click();}
 importBackup.addEventListener("change",e=>{const file=e.target.files[0]; const reader=new FileReader(); reader.onload=ev=>{const data=JSON.parse(ev.target.result); if(data.sessions) localStorage.setItem("sessions",JSON.stringify(data.sessions)); if(data.completedSessions) localStorage.setItem("completedSessions",JSON.stringify(data.completedSessions)); loadSessionList(); loadCompletedList(); alert("불러오기 완료");}; reader.readAsText(file);});
 
-function autoScaleGrid(){ const grid=document.querySelector(".grid"); const totalW=120*5; const totalH=160*4; const scaleW=(window.innerWidth*0.95)/totalW; const scaleH=(window.innerHeight-180)/totalH; let scale=Math.min(scaleW,scaleH); const isIPad=/iPad|Macintosh/.test(navigator.userAgent)&&window.innerWidth>768; if(isIPad) scale*=0.95; if(scale>1) scale=1; if(scale<0.45) scale=0.45; grid.style.transform=`scale(${scale})`; }
+function autoScaleGrid(){ const grid=document.querySelector(".grid"); const totalW=120*5; const totalH=160*4; const scaleW=(window.innerWidth*0.95)/totalW; const scaleH=(window.innerHeight-180)/totalH; let scale=Math.min(scaleW,scaleH); const isIPad=/iPad|Macintosh/.test(navigator.userAgent)&&window.innerWidth>768; if(isIPad) scale*=0.95; if(scale>1) scale=1; if(scale<0.45) scale=0.45; grid.style.transform=`scale(${scale})`;}
 
 window.addEventListener("resize",autoScaleGrid);
+
 window.onload=()=>{
  const saved=localStorage.getItem("memoryPathState");
  if(saved){ const s=JSON.parse(saved); words=s.words||[]; positions=s.positions||[]; completedWords=s.completedWords||[]; originalWords=s.originalWords||[];}
