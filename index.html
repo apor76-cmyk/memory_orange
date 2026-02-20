@@ -90,14 +90,14 @@ button{padding:6px 12px;border:none;border-radius:12px;background:var(--btn);col
 // ---------------- GitHubSync ----------------
 class GitHubSync {
   static tokenKey = "githubToken";
-  static repoOwner = "YOUR_GITHUB_ID"; // 본인 GitHub ID
+  static repoOwner = "apor76-cmyk"; // 본인 GitHub ID
   static branch = "main";
   static filePath = "memorypath_backup.json";
 
   static selectRepo() {
     const type = prompt("저장소 유형 선택: public 또는 private", "private")?.toLowerCase();
-    if(type==="public") GitHubSync.repoName = "YOUR_PUBLIC_REPO_NAME";
-    else GitHubSync.repoName = "YOUR_PRIVATE_REPO_NAME";
+    if(type==="public") GitHubSync.repoName = "memory_orange";
+    else GitHubSync.repoName = "memory_dark";
   }
 
   static async getToken() {
