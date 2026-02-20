@@ -1,7 +1,7 @@
 /* ================= GitHub Sync (수정 버전) ================= */
 const GITHUB = {
   user: "apor76-cmyk",
-  repo: "memory_dark",
+  repo: "memory_orangedata",
   branch: "main",
   path: "memory_sync.json"
 };
