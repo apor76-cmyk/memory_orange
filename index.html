@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Memory Path Infinite</title>
+<title>Memory Path Infinite (토큰 없이)</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
 :root{
@@ -35,7 +35,7 @@ button{padding:6px 12px;border:none;border-radius:12px;background:var(--btn);col
 </head>
 <body>
 
-<h2>🧠 Memory Path Infinite</h2>
+<h2>🧠 Memory Path Infinite (토큰 없이)</h2>
 
 <div class="control-row">
  <input type="file" id="upload" accept=".xlsx">
@@ -44,11 +44,10 @@ button{padding:6px 12px;border:none;border-radius:12px;background:var(--btn);col
  <button onclick="toggleFullscreen()">🖥 전체화면</button>
 </div>
 
-<!-- GitHub 동기화 버튼 -->
+<!-- GitHub 동기화 버튼 (알림만) -->
 <div class="control-row">
- <button onclick="GitHubSync.syncToGitHub()">🔼 GitHub로 올리기</button>
- <button onclick="GitHubSync.syncFromGitHub()">🔽 GitHub에서 내려받기</button>
- <button onclick="GitHubSync.clearToken()">🔑 토큰 초기화</button>
+ <button onclick="syncToGitHub()">🔼 GitHub로 올리기 (알림만)</button>
+ <button onclick="syncFromGitHub()">🔽 GitHub에서 내려받기</button>
 </div>
 
 <div class="tabs">
@@ -87,97 +86,8 @@ button{padding:6px 12px;border:none;border-radius:12px;background:var(--btn);col
 </div>
 
 <script>
-/* ================= GitHub Sync ================= */
-const GITHUB = {
-  user: "apor76-cmyk",
-  repo: "memory_dark",
-  branch: "main",
-  path: "memory_sync.json"
-};
-const GH_API = `https://api.github.com/repos/${GITHUB.user}/${GITHUB.repo}/contents/${GITHUB.path}`;
-const GH_RAW = `https://raw.githubusercontent.com/${GITHUB.user}/${GITHUB.repo}/${GITHUB.branch}/${GITHUB.path}`;
-
-function getToken() {
-  let token = localStorage.getItem("GH_TOKEN");
-  if(!token){
-    token = prompt("GitHub Token 입력 (한 번만 입력, repo 권한 필요)");
-    if(token) localStorage.setItem("GH_TOKEN", token);
-  }
-  return token;
-}
-
-function getSyncData() {
-  return {
-    memoryPathState: localStorage.getItem("memoryPathState") || "{}",
-    sessions: localStorage.getItem("sessions") || "{}",
-    completedSessions: localStorage.getItem("completedSessions") || "{}",
-    darkMode: localStorage.getItem("darkMode") || "false"
-  };
-}
-
-function mergeJSON(localStr, remoteStr) {
-  try { return JSON.stringify({...JSON.parse(remoteStr||"{}"), ...JSON.parse(localStr||"{}")}); }
-  catch{return localStr||"{}";}
-}
-
-async function syncFromGitHub() {
-  try{
-    const res = await fetch(GH_RAW+"?t="+Date.now());
-    if(!res.ok) throw "파일 없음 또는 네트워크 문제";
-    const remoteData = await res.json();
-    const localData = getSyncData();
-
-    const merged = {
-      memoryPathState: mergeJSON(localData.memoryPathState, remoteData.memoryPathState),
-      sessions: mergeJSON(localData.sessions, remoteData.sessions),
-      completedSessions: mergeJSON(localData.completedSessions, remoteData.completedSessions),
-      darkMode: remoteData.darkMode || localData.darkMode
-    };
-
-    applySyncData(merged);
-    render(); loadSessionList(); loadCompletedList();
-    alert("✅ GitHub에서 데이터 내려받기 완료!");
-
-  }catch(e){console.error(e); alert("❌ 내려받기 실패: "+e);}
-}
-
-async function syncToGitHub() {
-  try{
-    const token = getToken();
-    if(!token) return alert("토큰 필요");
-
-    const data = getSyncData();
-    let sha = undefined;
-
-    const check = await fetch(GH_API, {headers:{Authorization:`token ${token}`}});
-    if(check.ok){ const j = await check.json(); sha = j.sha; }
-
-    const content = btoa(unescape(encodeURIComponent(JSON.stringify(data,null,2))));
-
-    const res = await fetch(GH_API,{
-      method:"PUT",
-      headers:{Authorization:`token ${token}`, "Content-Type":"application/json"},
-      body: JSON.stringify({message:"MemoryPath 자동 백업", content, branch:GITHUB.branch, ...(sha?{sha}:{})})
-    });
-
-    if(res.ok) alert("✅ GitHub 업로드 성공!");
-    else{ const err = await res.json(); console.error("업로드 실패:", err); alert("❌ 업로드 실패: "+(err.message||"Unknown"));}
-
-  }catch(e){console.error(e); alert("❌ 업로드 실패: "+e);}
-}
-
-function applySyncData(data){
-  if(!data) return;
-  if(data.memoryPathState) localStorage.setItem("memoryPathState", data.memoryPathState);
-  if(data.sessions) localStorage.setItem("sessions", data.sessions);
-  if(data.completedSessions) localStorage.setItem("completedSessions", data.completedSessions);
-  if(data.darkMode) localStorage.setItem("darkMode", data.darkMode);
-}
-
-window.GitHubSync = {syncToGitHub, syncFromGitHub, clearToken:()=>{localStorage.removeItem("GH_TOKEN"); alert("토큰 삭제됨");}};
-
-/* ================= 기존 Memory Path Infinite ================= */
-const layout=[5,5,5,5], maxStep=20;
+const layout=[5,5,5,5];
+const maxStep=20;
 let words=[],positions=[],completedWords=[],originalWords=[],isShuffled=false;
 
 function shuffleToggle(){if(!words.length) return; if(!isShuffled){originalWords=JSON.parse(JSON.stringify(words)); words.sort(()=>Math.random()-0.5); positions=words.map(()=>0); isShuffled=true;} else{words=JSON.parse(JSON.stringify(originalWords)); positions=words.map(()=>0); isShuffled=false;} render();}
@@ -186,18 +96,21 @@ function toggleFullscreen(){if(!document.fullscreenElement){document.documentEle
 function switchTab(id){document.querySelectorAll(".tab").forEach(t=>t.classList.remove("active")); event.target.classList.add("active"); document.querySelectorAll(".panel").forEach(p=>p.classList.remove("active")); document.getElementById(id).classList.add("active");}
 
 upload.addEventListener("change",e=>{
- const file=e.target.files[0]; const reader=new FileReader();
+ const file=e.target.files[0];
+ const reader=new FileReader();
  reader.onload=ev=>{
-  const data=new Uint8Array(ev.target.result); const wb=XLSX.read(data,{type:"array"});
-  const sheet=wb.Sheets[wb.SheetNames[0]]; const json=XLSX.utils.sheet_to_json(sheet);
-  words=json.map(r=>{const k=Object.keys(r); return {word:r[k[0]], meaning:r[k[1]]};});
-  originalWords=JSON.parse(JSON.stringify(words)); positions=words.map(()=>0); completedWords=[]; saveState(); render();
+  const data=new Uint8Array(ev.target.result);
+  const wb=XLSX.read(data,{type:"array"});
+  const sheet=wb.Sheets[wb.SheetNames[0]];
+  const json=XLSX.utils.sheet_to_json(sheet);
+  words=json.map(r=>{const k=Object.keys(r);return{word:r[k[0]],meaning:r[k[1]]};});
+  originalWords=JSON.parse(JSON.stringify(words));
+  positions=words.map(()=>0); completedWords=[]; saveState(); render();
  };
  reader.readAsArrayBuffer(file);
 });
 
 function moveCard(i,step){if(step>0){positions[i]++; if(positions[i]>=maxStep){const w=words[i]; if(!completedWords.some(c=>c.word===w.word)) completedWords.push(w); positions[i]=maxStep;}}else positions[i]=0; saveState(); render();}
-
 function render(){
  const grid=document.getElementById("grid"); grid.innerHTML=""; let stepIndex=0;
  layout.forEach(rc=>{
@@ -229,7 +142,6 @@ function render(){
 }
 
 function saveState(){localStorage.setItem("memoryPathState",JSON.stringify({words,positions,completedWords,originalWords}));}
-
 function saveSession(){const name=sessionName.value;if(!name) return alert("이름 입력"); const sessions=JSON.parse(localStorage.getItem("sessions")||"{}"); sessions[name]={words,positions,completedWords}; localStorage.setItem("sessions",JSON.stringify(sessions)); loadSessionList();}
 function loadSession(){const sessions=JSON.parse(localStorage.getItem("sessions")||"{}"); const s=sessions[sessionList.value]; if(!s) return; words=s.words; positions=s.positions; completedWords=s.completedWords; render();}
 function deleteSession(){const sessions=JSON.parse(localStorage.getItem("sessions")||"{}"); delete sessions[sessionList.value]; localStorage.setItem("sessions",JSON.stringify(sessions)); loadSessionList();}
@@ -245,12 +157,31 @@ importBackup.addEventListener("change",e=>{const file=e.target.files[0]; const r
 
 function autoScaleGrid(){ const grid=document.querySelector(".grid"); const totalW=120*5; const totalH=160*4; const scaleW=(window.innerWidth*0.95)/totalW; const scaleH=(window.innerHeight-180)/totalH; let scale=Math.min(scaleW,scaleH); const isIPad=/iPad|Macintosh/.test(navigator.userAgent)&&window.innerWidth>768; if(isIPad) scale*=0.95; if(scale>1) scale=1; if(scale<0.45) scale=0.45; grid.style.transform=`scale(${scale})`;}
 
+/* ================= GitHub Sync (토큰 없이) ================= */
+const GH_URL = "https://raw.githubusercontent.com/apor76-cmyk/memory_dark/main/memory_sync.json";
+
+async function syncFromGitHub(){
+  try{
+    const res = await fetch(GH_URL+"?t="+Date.now());
+    if(!res.ok) throw "GitHub 공개파일 없음";
+    const remoteData = await res.json();
+    if(remoteData.memoryPathState) localStorage.setItem("memoryPathState", JSON.stringify(remoteData.memoryPathState));
+    if(remoteData.sessions) localStorage.setItem("sessions", JSON.stringify(remoteData.sessions));
+    if(remoteData.completedSessions) localStorage.setItem("completedSessions", JSON.stringify(remoteData.completedSessions));
+    if(remoteData.darkMode) localStorage.setItem("darkMode", remoteData.darkMode);
+    render(); loadSessionList(); loadCompletedList();
+    alert("✅ GitHub 공개 데이터 내려받기 완료!");
+  } catch(e){ console.log(e); alert("❌ 내려받기 실패"); }
+}
+
+function syncToGitHub(){ alert("⚠️ 실제 업로드는 실행되지 않으며 알림만 표시됩니다."); }
+
 window.addEventListener("resize",autoScaleGrid);
 
 window.onload=()=>{
+ if(localStorage.getItem("darkMode")==="true") document.body.classList.add("dark");
  const saved=localStorage.getItem("memoryPathState");
  if(saved){ const s=JSON.parse(saved); words=s.words||[]; positions=s.positions||[]; completedWords=s.completedWords||[]; originalWords=s.originalWords||[];}
- if(localStorage.getItem("darkMode")==="true") document.body.classList.add("dark");
  render(); loadSessionList(); loadCompletedList();
 };
 </script>
