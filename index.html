@@ -48,6 +48,7 @@ button{padding:6px 12px;border:none;border-radius:12px;background:var(--btn);col
 <div class="control-row">
  <button onclick="GitHubSync.syncToGitHub()">🔼 GitHub로 올리기</button>
  <button onclick="GitHubSync.syncFromGitHub()">🔽 GitHub에서 내려받기</button>
+ <button onclick="GitHubSync.clearToken()">🔑 토큰 초기화</button>
 </div>
 
 <div class="tabs">
@@ -85,8 +86,79 @@ button{padding:6px 12px;border:none;border-radius:12px;background:var(--btn);col
  </div>
 </div>
 
-<script src="githubsync.js" defer></script>
 <script>
+// ---------------- GitHubSync 통합 ----------------
+class GitHubSync {
+  static tokenKey = "githubToken";
+  static repoOwner = "YOUR_GITHUB_ID"; // ← 본인 GitHub ID
+  static repoName = "YOUR_REPO_NAME";  // ← 저장소 이름
+  static branch = "main";
+  static filePath = "memorypath_backup.json"; // GitHub 저장 파일
+
+  static async getToken() {
+    let token = localStorage.getItem(GitHubSync.tokenKey);
+    if (!token) {
+      token = prompt("GitHub Personal Access Token을 입력하세요.\n권한: repo (public repo 읽기/쓰기)");
+      if (!token) throw "토큰이 입력되지 않았습니다.";
+      localStorage.setItem(GitHubSync.tokenKey, token);
+    }
+    return token;
+  }
+
+  static async syncToGitHub() {
+    try {
+      const token = await GitHubSync.getToken();
+      const data = {
+        sessions: JSON.parse(localStorage.getItem("sessions") || "{}"),
+        completedSessions: JSON.parse(localStorage.getItem("completedSessions") || "{}")
+      };
+      const content = btoa(unescape(encodeURIComponent(JSON.stringify(data,null,2))));
+
+      const shaRes = await fetch(`https://api.github.com/repos/${GitHubSync.repoOwner}/${GitHubSync.repoName}/contents/${GitHubSync.filePath}?ref=${GitHubSync.branch}`, {
+        headers: { Authorization: "token " + token }
+      });
+      const shaData = shaRes.status === 200 ? await shaRes.json() : null;
+      const sha = shaData ? shaData.sha : undefined;
+
+      const res = await fetch(`https://api.github.com/repos/${GitHubSync.repoOwner}/${GitHubSync.repoName}/contents/${GitHubSync.filePath}`, {
+        method: "PUT",
+        headers: { Authorization: "token " + token, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: "MemoryPath Backup",
+          content: content,
+          branch: GitHubSync.branch,
+          sha: sha
+        })
+      });
+      if (!res.ok) throw "업로드 실패";
+      alert("✅ GitHub로 업로드 완료!");
+    } catch (e) { alert("❌ 오류: " + e); }
+  }
+
+  static async syncFromGitHub() {
+    try {
+      const token = await GitHubSync.getToken();
+      const res = await fetch(`https://api.github.com/repos/${GitHubSync.repoOwner}/${GitHubSync.repoName}/contents/${GitHubSync.filePath}?ref=${GitHubSync.branch}`, {
+        headers: { Authorization: "token " + token }
+      });
+      if (!res.ok) throw "파일을 불러오지 못했습니다.";
+      const data = await res.json();
+      const content = JSON.parse(decodeURIComponent(escape(atob(data.content))));
+      if (content.sessions) localStorage.setItem("sessions", JSON.stringify(content.sessions));
+      if (content.completedSessions) localStorage.setItem("completedSessions", JSON.stringify(content.completedSessions));
+      alert("✅ GitHub에서 불러오기 완료!");
+      if(typeof loadSessionList==="function") loadSessionList();
+      if(typeof loadCompletedList==="function") loadCompletedList();
+    } catch (e) { alert("❌ 오류: " + e); }
+  }
+
+  static clearToken() {
+    localStorage.removeItem(GitHubSync.tokenKey);
+    alert("토큰이 삭제되었습니다.");
+  }
+}
+window.GitHubSync = GitHubSync;
+// ---------------- 기존 Memory Path Infinite 코드 ----------------
 const layout=[5,5,5,5];
 const maxStep=20;
 let words=[],positions=[],completedWords=[],originalWords=[],isShuffled=false;
